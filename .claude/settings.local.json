@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(npm list *)",
+      "Bash(xargs grep *)",
+      "Bash(npm install *)",
+      "Bash(xargs -I {} basename {})",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"C:\\\\Users\\\\HP\\\\wa-field-tracker\\\\docs\\\\superpowers\\\\specs\")",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\HP\\\\mapMyWhatsapp\" -Force | Where-Object {$_.Name -ne \"node_modules\"} | Select-Object Name, FullName)",
+      "PowerShell(cd \"C:\\\\Users\\\\HP\\\\wa-field-tracker\"; git show 252968a --stat; git show 252968a -- .gitignore)",
+      "PowerShell(cd \"C:\\\\Users\\\\HP\\\\wa-field-tracker\"; git checkout -- .env.example 2>&1; if \\($LASTEXITCODE -ne 0\\) { \"Need to restore from last commit\" })",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{content_type}\" http://localhost:80/)",
+      "PowerShell(docker pull dhruvsharma983/wa-field-tracker-ui:latest 2>&1)",
+      "PowerShell(tail -5)",
+      "PowerShell(docker pull dhruvsharma983/wa-field-tracker-ui:latest)",
+      "PowerShell(docker exec omni-ui sh -c \"wget -qO- http://127.0.0.1:80/ 2>&1 | head -3\")",
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:8090/\" -UseBasicParsing)"
+    ]
+  }
+}
