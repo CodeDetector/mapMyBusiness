@@ -1,6 +1,16 @@
 const express = require('express');
 const profileService = require('./profileService');
 const service = require('./service');
+const { enqueue: enqueueAgentJob } = require('./queue');
+
+// Fire-and-forget enqueue: never blocks the API response.
+function fireEnqueue(job) {
+    setImmediate(() => {
+        enqueueAgentJob(job).catch(err =>
+            console.error('mapMyBusiness/router fireEnqueue:', err.message)
+        );
+    });
+}
 
 /**
  * Build an Express router exposing the mapMyBusiness HTTP surface.
@@ -35,6 +45,12 @@ function createRouter({ requireAuth }) {
                 }
             }
             const updated = await profileService.writeProfile(req.body);
+            fireEnqueue({
+                channel: 'business',
+                sourceTable: 'business_profile',
+                sourceId: updated?.id ?? null,
+                payload: { row: updated, action: 'upsert' },
+            });
             res.json(updated);
         } catch (err) {
             res.status(500).json({ error: err.message });
@@ -60,6 +76,12 @@ function createRouter({ requireAuth }) {
             products: Array.isArray(products) ? products : null,
         });
         if (!created) return res.status(500).json({ error: 'Failed to create supplier' });
+        fireEnqueue({
+            channel: 'business',
+            sourceTable: 'suppliers',
+            sourceId: created.id,
+            payload: { row: created, action: 'insert' },
+        });
         res.status(201).json(created);
     });
 
@@ -82,8 +104,14 @@ function createRouter({ requireAuth }) {
             products: Array.isArray(products) ? products : null,
         };
         const client = await service.createClient(payload);
-        if (client) res.status(201).json(client);
-        else res.status(500).json({ error: 'Failed to create client' });
+        if (!client) return res.status(500).json({ error: 'Failed to create client' });
+        fireEnqueue({
+            channel: 'business',
+            sourceTable: 'clients',
+            sourceId: client.id,
+            payload: { row: client, action: 'insert' },
+        });
+        res.status(201).json(client);
     });
 
     router.patch('/clients/:id/assign', requireAuth, async (req, res) => {
@@ -128,8 +156,14 @@ function createRouter({ requireAuth }) {
         }
 
         const newEmployee = await service.createEmployee(employeeData);
-        if (newEmployee) res.status(201).json(newEmployee);
-        else res.status(500).json({ error: 'Failed to create employee' });
+        if (!newEmployee) return res.status(500).json({ error: 'Failed to create employee' });
+        fireEnqueue({
+            channel: 'business',
+            sourceTable: 'employees',
+            sourceId: newEmployee.id,
+            payload: { row: newEmployee, action: 'insert' },
+        });
+        res.status(201).json(newEmployee);
     });
 
     // ─── Invitations ─────────────────────────────────────────────────────────
@@ -154,6 +188,12 @@ function createRouter({ requireAuth }) {
                 invited_by: caller.id,
             });
             if (!invitation) return res.status(500).json({ error: 'Failed to create invitation' });
+            fireEnqueue({
+                channel: 'business',
+                sourceTable: 'employee_invitations',
+                sourceId: invitation.id,
+                payload: { row: invitation, action: 'insert' },
+            });
             res.status(201).json(invitation);
         } catch (err) {
             res.status(500).json({ error: err.message });

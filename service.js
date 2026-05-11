@@ -121,6 +121,20 @@ async function createEmployee(employeeData) {
     }
 }
 
+async function getAllEmployees() {
+    try {
+        const { data, error } = await getClient()
+            .from('employees')
+            .select('id, Name, emailId, Role, department, designation, is_admin, managedBy')
+            .order('id');
+        if (error) throw error;
+        return data || [];
+    } catch (err) {
+        console.error('getAllEmployees failed:', err.message);
+        return [];
+    }
+}
+
 // ─── Invitations ────────────────────────────────────────────────────────────
 
 async function getInvitations() {
@@ -219,7 +233,7 @@ module.exports = {
     // clients
     getAllClients, createClient, updateClientManagedBy,
     // employees
-    countEmployees, getEmployeeByEmail, createEmployee,
+    countEmployees, getEmployeeByEmail, createEmployee, getAllEmployees,
     // invitations
     getInvitations, createInvitation, getPendingInvitationByEmail, markInvitationAccepted,
     // onboarding

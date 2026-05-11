@@ -77,6 +77,22 @@ app.get('/internal/onboarding/status', requireInternalToken, async (req, res) =>
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Full business context — used by refinement agents on every refresh.
+// One round-trip returns profile + suppliers + clients + employees.
+app.get('/internal/business/context', requireInternalToken, async (req, res) => {
+    try {
+        const [profile, suppliers, clients, employees] = await Promise.all([
+            profileService.readProfile(),
+            service.getAllSuppliers(),
+            service.getAllClients(),
+            service.getAllEmployees ? service.getAllEmployees() : [],
+        ]);
+        res.json({ profile, suppliers, clients, employees });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Public-shape endpoints (mounted via the package router)
 app.use('/api', createRouter({ requireAuth }));
 
