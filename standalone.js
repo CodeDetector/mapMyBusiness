@@ -10,6 +10,7 @@
 
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
+const ws = require('ws');
 const { createRouter } = require('./router');
 const profileService = require('./profileService');
 const service = require('./service');
@@ -24,7 +25,7 @@ if (!supabaseUrl || !supabaseKey) {
     process.exit(1);
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(supabaseUrl, supabaseKey, { realtime: { transport: ws } });
 
 async function requireAuth(req, res, next) {
     // Internal service token short-circuit: trust the caller, take user identity
