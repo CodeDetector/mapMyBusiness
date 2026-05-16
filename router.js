@@ -200,6 +200,66 @@ function createRouter({ requireAuth }) {
         }
     });
 
+    // ─── Contacts ────────────────────────────────────────────────────────────
+    router.get('/contacts', requireAuth, async (req, res) => {
+        const filter = req.query.category ? { category: req.query.category } : {};
+        res.json(await service.getAllContacts(filter));
+    });
+
+    router.get('/contacts/lookup', requireAuth, async (req, res) => {
+        const { phone, jid, lid } = req.query;
+        if (!phone && !jid && !lid) {
+            return res.status(400).json({ error: 'phone, jid, or lid required' });
+        }
+        const found = await service.findContactByIdentifier({
+            phone, waJid: jid, waLid: lid,
+        });
+        res.json({ contact: found || null });
+    });
+
+    router.post('/contacts', requireAuth, async (req, res) => {
+        const { name, category } = req.body;
+        if (!name || !category) {
+            return res.status(400).json({ error: 'name and category are required' });
+        }
+        if (!['employee','supplier','client','other'].includes(category)) {
+            return res.status(400).json({ error: 'invalid category' });
+        }
+        // Force org existence for supplier/client categories
+        if (category === 'supplier' && !req.body.supplier_id) {
+            return res.status(400).json({ error: 'supplier_id required for category=supplier' });
+        }
+        if (category === 'client' && !req.body.client_id) {
+            return res.status(400).json({ error: 'client_id required for category=client' });
+        }
+
+        // For employee, create the employees row first and link it
+        if (category === 'employee' && !req.body.employee_id) {
+            const emp = await service.createEmployee({
+                Name:    req.body.name,
+                emailId: req.body.email   || null,
+                Role:    req.body.role    || null,
+                Mobile:  req.body.phone   || null,
+                contact: req.body.phone   || null,
+            });
+            // createEmployee already mirrors a contacts row, so just return it
+            const linked = await service.findContactByIdentifier({
+                phone: req.body.phone,
+            });
+            return res.json(linked || { id: null, employee_id: emp?.id });
+        }
+
+        const created = await service.createContact(req.body);
+        if (!created) return res.status(500).json({ error: 'failed to create contact' });
+        res.json(created);
+    });
+
+    router.put('/contacts/:id', requireAuth, async (req, res) => {
+        const updated = await service.updateContact(req.params.id, req.body);
+        if (!updated) return res.status(500).json({ error: 'failed to update contact' });
+        res.json(updated);
+    });
+
     // ─── Onboarding status ───────────────────────────────────────────────────
     router.get('/onboarding/status', requireAuth, async (req, res) => {
         try {
