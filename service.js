@@ -114,6 +114,21 @@ async function createEmployee(employeeData) {
             .select()
             .single();
         if (error) throw error;
+
+        // Mirror into the unified contacts table so this employee shows up
+        // in every roster / matching flow that uses `contacts`.
+        if (data?.id) {
+            const phone = employeeData.Mobile || employeeData.contact || null;
+            await createContact({
+                name:        employeeData.Name,
+                email:       employeeData.emailId,
+                phone,
+                role:        employeeData.Role,
+                category:    'employee',
+                employee_id: data.id,
+                wa_jid:      phone ? `${phone}@s.whatsapp.net` : null,
+            });
+        }
         return data;
     } catch (err) {
         console.error('createEmployee failed:', err.message);
@@ -196,6 +211,89 @@ async function markInvitationAccepted(id) {
     }
 }
 
+// ─── Contacts (unified roster of every human across employees / suppliers / clients / other) ──
+
+async function getAllContacts(filter = {}) {
+    try {
+        let q = getClient().from('contacts').select('*').order('name');
+        if (filter.category) q = q.eq('category', filter.category);
+        const { data, error } = await q;
+        if (error) throw error;
+        return data || [];
+    } catch (err) {
+        console.error('getAllContacts failed:', err.message);
+        return [];
+    }
+}
+
+// Look up an existing contact by any WhatsApp identifier or phone.
+// Returns the first match (phone > wa_jid > wa_lid priority).
+async function findContactByIdentifier({ phone, waJid, waLid }) {
+    try {
+        const c = getClient();
+        if (phone) {
+            const { data } = await c.from('contacts').select('*').eq('phone', phone).maybeSingle();
+            if (data) return data;
+        }
+        if (waJid) {
+            const { data } = await c.from('contacts').select('*').eq('wa_jid', waJid).maybeSingle();
+            if (data) return data;
+        }
+        if (waLid) {
+            const { data } = await c.from('contacts').select('*').eq('wa_lid', waLid).maybeSingle();
+            if (data) return data;
+        }
+        return null;
+    } catch (err) {
+        console.error('findContactByIdentifier failed:', err.message);
+        return null;
+    }
+}
+
+async function createContact(payload) {
+    const row = {
+        name:        payload.name,
+        email:       payload.email       || null,
+        phone:       payload.phone       || null,
+        role:        payload.role        || null,
+        category:    payload.category,
+        supplier_id: payload.supplier_id || null,
+        client_id:   payload.client_id   || null,
+        employee_id: payload.employee_id || null,
+        other_label: payload.other_label || null,
+        wa_jid:      payload.wa_jid      || null,
+        wa_lid:      payload.wa_lid      || null,
+    };
+    try {
+        const { data, error } = await getClient()
+            .from('contacts')
+            .insert([row])
+            .select()
+            .single();
+        if (error) throw error;
+        return data;
+    } catch (err) {
+        console.error('createContact failed:', err.message);
+        return null;
+    }
+}
+
+async function updateContact(id, patch) {
+    try {
+        const { data, error } = await getClient()
+            .from('contacts')
+            .update({ ...patch, updated_at: new Date().toISOString() })
+            .eq('id', id)
+            .select()
+            .single();
+        if (error) throw error;
+        return data;
+    } catch (err) {
+        console.error('updateContact failed:', err.message);
+        return null;
+    }
+}
+
 // ─── Onboarding status ──────────────────────────────────────────────────────
 
 async function getOnboardingStatus() {
@@ -236,6 +334,8 @@ module.exports = {
     countEmployees, getEmployeeByEmail, createEmployee, getAllEmployees,
     // invitations
     getInvitations, createInvitation, getPendingInvitationByEmail, markInvitationAccepted,
+    // contacts
+    getAllContacts, findContactByIdentifier, createContact, updateContact,
     // onboarding
     getOnboardingStatus,
 };
