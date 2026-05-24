@@ -304,24 +304,30 @@ async function updateContact(id, patch) {
 
 // ─── Onboarding status ──────────────────────────────────────────────────────
 
-async function getOnboardingStatus() {
+async function getOnboardingStatus(businessId) {
     try {
         const c = getClient();
+        // Without a business_id we have no tenant context — treat as
+        // "nothing onboarded yet". Callers should only hit this path for
+        // orphan users (the wa-field-tracker route skips it in that case).
+        if (!businessId) {
+            return { hasBusiness: false, supplierCount: 0, clientCount: 0, hasAdmin: false, employeeCount: 0 };
+        }
         const [
-            { count: businessCount },
             { count: supplierCount },
             { count: clientCount },
             { count: adminCount },
             { count: employeeCount },
         ] = await Promise.all([
-            c.from('business_profile').select('*', { count: 'exact', head: true }),
-            c.from('suppliers').select('*', { count: 'exact', head: true }),
-            c.from('clients').select('*', { count: 'exact', head: true }),
-            c.from('employees').select('*', { count: 'exact', head: true }).eq('is_admin', true),
-            c.from('employees').select('*', { count: 'exact', head: true }),
+            c.from('suppliers').select('*', { count: 'exact', head: true }).eq('business_id', businessId),
+            c.from('clients').select('*', { count: 'exact', head: true }).eq('business_id', businessId),
+            c.from('employees').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('is_admin', true),
+            c.from('employees').select('*', { count: 'exact', head: true }).eq('business_id', businessId),
         ]);
+        // hasBusiness is true by construction once we have a business_id —
+        // the row necessarily exists because the FK is NOT NULL.
         return {
-            hasBusiness:   (businessCount || 0) > 0,
+            hasBusiness:   true,
             supplierCount: supplierCount || 0,
             clientCount:   clientCount || 0,
             hasAdmin:      (adminCount || 0) > 0,

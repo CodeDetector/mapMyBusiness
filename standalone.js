@@ -79,7 +79,10 @@ app.get('/internal/business/profile', requireInternalToken, async (req, res) => 
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.get('/internal/onboarding/status', requireInternalToken, async (req, res) => {
-    try { res.json(await service.getOnboardingStatus()); }
+    try {
+        const businessId = req.query.business_id ? Number(req.query.business_id) : null;
+        res.json(await service.getOnboardingStatus(businessId));
+    }
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
