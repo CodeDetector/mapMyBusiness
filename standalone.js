@@ -36,6 +36,12 @@ async function requireAuth(req, res, next) {
         const id = req.headers['x-internal-user-id'];
         if (!email) return res.status(400).json({ error: 'X-Internal-User-Email required for internal calls' });
         req.user = { email, id };
+        // wa-field-tracker has already resolved the caller's employee → business.
+        // Trust the header so we skip a second DB hop. Absent on the invite-
+        // accept path (caller is an orphan), where the route derives
+        // business_id from the pending invitation instead.
+        const bid = req.headers['x-internal-business-id'];
+        if (bid) req.business_id = Number(bid);
         return next();
     }
 

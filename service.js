@@ -116,10 +116,13 @@ async function createEmployee(employeeData) {
         if (error) throw error;
 
         // Mirror into the unified contacts table so this employee shows up
-        // in every roster / matching flow that uses `contacts`.
+        // in every roster / matching flow that uses `contacts`. The mirror
+        // must inherit the same business_id, or NOT NULL on contacts.business_id
+        // would fail this insert.
         if (data?.id) {
             const phone = employeeData.Mobile || employeeData.contact || null;
             await createContact({
+                business_id: employeeData.business_id,
                 name:        employeeData.Name,
                 email:       employeeData.emailId,
                 phone,
@@ -140,7 +143,7 @@ async function getAllEmployees() {
     try {
         const { data, error } = await getClient()
             .from('employees')
-            .select('id, Name, emailId, Role, department, designation, is_admin, managedBy')
+            .select('id, Name, emailId, Role, department, designation, is_admin, managedBy, business_id')
             .order('id');
         if (error) throw error;
         return data || [];
@@ -168,9 +171,13 @@ async function getInvitations() {
 
 async function createInvitation(invitationData) {
     try {
+        // onConflict now matches the new UNIQUE(business_id, email) in
+        // 2026-05-24-multi-tenant-foundation.sql so re-inviting the same
+        // address within a tenant updates the row, while the same address
+        // can be invited independently by a different tenant.
         const { data, error } = await getClient()
             .from('employee_invitations')
-            .upsert([invitationData], { onConflict: 'email' })
+            .upsert([invitationData], { onConflict: 'business_id,email' })
             .select()
             .single();
         if (error) throw error;
@@ -252,6 +259,7 @@ async function findContactByIdentifier({ phone, waJid, waLid }) {
 
 async function createContact(payload) {
     const row = {
+        business_id: payload.business_id,
         name:        payload.name,
         email:       payload.email       || null,
         phone:       payload.phone       || null,

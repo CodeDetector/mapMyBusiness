@@ -63,11 +63,15 @@ function createRouter({ requireAuth }) {
     });
 
     router.post('/suppliers', requireAuth, async (req, res) => {
+        if (!req.business_id) {
+            return res.status(403).json({ error: 'NO_EMPLOYEE_RECORD' });
+        }
         const { name, website, description, emailIds, contacts, products } = req.body;
         if (!name || !String(name).trim()) {
             return res.status(400).json({ error: 'Supplier name is required' });
         }
         const created = await service.createSupplier({
+            business_id: req.business_id,
             name: name.trim(),
             website: website ? String(website).trim() : null,
             description: description ? String(description).trim() : null,
@@ -91,9 +95,13 @@ function createRouter({ requireAuth }) {
     });
 
     router.post('/clients', requireAuth, async (req, res) => {
+        if (!req.business_id) {
+            return res.status(403).json({ error: 'NO_EMPLOYEE_RECORD' });
+        }
         const { businessName, location, description, emailId, contacts, managedBy, industry, products } = req.body;
         if (!businessName) return res.status(400).json({ error: 'businessName is required' });
         const payload = {
+            business_id: req.business_id,
             businessName,
             location: location || null,
             description: description || null,
@@ -124,6 +132,11 @@ function createRouter({ requireAuth }) {
     });
 
     // ─── Employees (invite-gated) ────────────────────────────────────────────
+    // First admins do NOT enter through this route — they come in via
+    // /api/onboarding/business which creates the businesses row and the admin
+    // employee row atomically. This route is exclusively for accepting an
+    // invitation; the invitation row supplies the tenant (business_id) and
+    // the admin flag.
     router.post('/employees', requireAuth, async (req, res) => {
         const employeeData = { ...req.body };
         if (!employeeData.Name || !employeeData.Mobile) {
@@ -134,26 +147,24 @@ function createRouter({ requireAuth }) {
         const authEmail = req.user.email.toLowerCase();
         employeeData.emailId = authEmail;
 
-        const empCount = await service.countEmployees();
-
-        if (empCount === 0) {
-            // First-ever signup → becomes Admin
-            employeeData.is_admin = true;
-            employeeData.invited_by = null;
-        } else {
-            const invite = await service.getPendingInvitationByEmail(authEmail);
-            if (!invite) {
-                return res.status(403).json({
-                    error: 'Registration is invite-only. Ask an admin to invite your work email.'
-                });
-            }
-            employeeData.is_admin = !!invite.is_admin;
-            employeeData.invited_by = invite.invited_by;
-            employeeData.department = invite.department || employeeData.department || null;
-            employeeData.designation = invite.designation || employeeData.designation || null;
-            if (!employeeData.Role) employeeData.Role = invite.role;
-            await service.markInvitationAccepted(invite.id);
+        const invite = await service.getPendingInvitationByEmail(authEmail);
+        if (!invite) {
+            return res.status(403).json({
+                error: 'Registration is invite-only. Ask an admin to invite your work email.'
+            });
         }
+        if (!invite.business_id) {
+            return res.status(500).json({
+                error: 'Invitation is missing tenant assignment — contact your admin.'
+            });
+        }
+        employeeData.business_id = invite.business_id;
+        employeeData.is_admin    = !!invite.is_admin;
+        employeeData.invited_by  = invite.invited_by;
+        employeeData.department  = invite.department  || employeeData.department  || null;
+        employeeData.designation = invite.designation || employeeData.designation || null;
+        if (!employeeData.Role) employeeData.Role = invite.role;
+        await service.markInvitationAccepted(invite.id);
 
         const newEmployee = await service.createEmployee(employeeData);
         if (!newEmployee) return res.status(500).json({ error: 'Failed to create employee' });
@@ -173,6 +184,9 @@ function createRouter({ requireAuth }) {
 
     router.post('/invitations', requireAuth, async (req, res) => {
         try {
+            if (!req.business_id) {
+                return res.status(403).json({ error: 'NO_EMPLOYEE_RECORD' });
+            }
             const caller = await service.getEmployeeByEmail(req.user.email);
             if (!caller) return res.status(403).json({ error: 'Only registered employees can invite' });
 
@@ -180,6 +194,7 @@ function createRouter({ requireAuth }) {
             if (!email || !role) return res.status(400).json({ error: 'email and role are required' });
 
             const invitation = await service.createInvitation({
+                business_id: req.business_id,
                 email: String(email).trim().toLowerCase(),
                 role,
                 department: department || null,
@@ -218,6 +233,9 @@ function createRouter({ requireAuth }) {
     });
 
     router.post('/contacts', requireAuth, async (req, res) => {
+        if (!req.business_id) {
+            return res.status(403).json({ error: 'NO_EMPLOYEE_RECORD' });
+        }
         const { name, category } = req.body;
         if (!name || !category) {
             return res.status(400).json({ error: 'name and category are required' });
@@ -236,6 +254,7 @@ function createRouter({ requireAuth }) {
         // For employee, create the employees row first and link it
         if (category === 'employee' && !req.body.employee_id) {
             const emp = await service.createEmployee({
+                business_id: req.business_id,
                 Name:    req.body.name,
                 emailId: req.body.email   || null,
                 Role:    req.body.role    || null,
@@ -249,7 +268,7 @@ function createRouter({ requireAuth }) {
             return res.json(linked || { id: null, employee_id: emp?.id });
         }
 
-        const created = await service.createContact(req.body);
+        const created = await service.createContact({ ...req.body, business_id: req.business_id });
         if (!created) return res.status(500).json({ error: 'failed to create contact' });
         res.json(created);
     });
